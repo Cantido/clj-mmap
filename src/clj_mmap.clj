@@ -1,4 +1,5 @@
 (ns clj-mmap
+  (:require [clojure.java.io :as io])
   (:import (java.io RandomAccessFile Closeable File)
            (java.nio.channels FileChannel FileChannel$MapMode)
            (clojure.lang Indexed Seqable)
@@ -41,12 +42,15 @@
    :read-only  "r"
    :read-write "rw"})
 
-(defn get-mmap 
-  "Provided a filename, mmap the entire file, and return an opaque type to allow further access.
-   Remember to use with-open, or to call .close, to clean up memory and open file descriptors."
-  ([^String filename] (get-mmap filename :read-only))
-  ([^String filename map-mode]
-   (let [fis  (java.io.RandomAccessFile. filename (map-perms map-mode))
+(defn get-mmap
+  "Provided a file, mmap the entire file, and return an opaque type to allow further access.
+   Remember to use with-open, or to call .close, to clean up memory and open file descriptors.
+   The file argument can be any implementation of clojure.java.io/Coercions."
+  ([file] (get-mmap file :read-only))
+  ([file map-mode]
+   (let [fis  (RandomAccessFile.
+                ^File (io/as-file file)
+                (str (map-perms map-mode)))
          fc   (.getChannel fis)
          size (.size fc)
          mmap (fn [pos n] (.map fc (map-modes map-mode) pos n))]
