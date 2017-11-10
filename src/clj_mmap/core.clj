@@ -56,6 +56,15 @@
          mmap (fn [pos n] (.map fc (map-modes map-mode) pos n))]
      (Mmap. fis fc (mapv #(mmap % (min (- size %)
                                        bytes-per-map))
+                         (range 0 size bytes-per-map)))))
+  ([file map-mode size]
+   (let [fis  (RandomAccessFile.
+                ^File (io/as-file file)
+                (str (map-perms map-mode)))
+         fc   (.getChannel fis)
+         mmap (fn [pos n] (.map fc (map-modes map-mode) pos n))]
+     (Mmap. fis fc (mapv #(mmap % (min (- size %)
+                                       bytes-per-map))
                          (range 0 size bytes-per-map))))))
 
 (defn get-bytes ^bytes [mmap pos n]

@@ -4,7 +4,8 @@
   :license {:name "MIT"
             :url "http://opensource.org/licenses/MIT"}
   :deploy-repositories [["releases" :clojars]]
-  :profiles {:dev {:dependencies [[org.clojure/clojure "1.8.0"]]}
+  :profiles {:dev {:dependencies [[org.clojure/clojure "1.8.0"]]
+                   :resource-paths ["test-resources"]}
              :1.9 {:dependencies [[org.clojure/clojure "1.9.0-beta4"]]}
              :1.8 {:dependencies [[org.clojure/clojure "1.8.0"]]}
              :1.7 {:dependencies [[org.clojure/clojure "1.7.0"]]}
