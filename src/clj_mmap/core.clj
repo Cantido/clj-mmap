@@ -1,4 +1,4 @@
-(ns clj-mmap
+(ns clj-mmap.core
   (:require [clojure.java.io :as io])
   (:import (java.io RandomAccessFile Closeable File)
            (java.nio.channels FileChannel FileChannel$MapMode)
