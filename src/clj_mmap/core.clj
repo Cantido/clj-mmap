@@ -1,4 +1,6 @@
 (ns clj-mmap.core
+  "Easily memory-map files via Java's NIO, and handle files
+   larger than 2GB."
   (:require [clojure.java.io :as io])
   (:import (java.io RandomAccessFile Closeable File)
            (java.nio.channels FileChannel FileChannel$MapMode)
@@ -43,9 +45,10 @@
    :read-write "rw"})
 
 (defn get-mmap
-  "Provided a file, mmap the entire file, and return an opaque type to allow further access.
-   Remember to use with-open, or to call .close, to clean up memory and open file descriptors.
-   The file argument can be any implementation of clojure.java.io/Coercions."
+  "Provided a file, mmap the entire file, and return an opaque type
+   to allow further access. Remember to use with-open, or to call
+   .close, to clean up memory and open file descriptors. The file
+   argument can be any implementation of clojure.java.io/Coercions."
   ([file] (get-mmap file :read-only))
   ([file map-mode]
    (let [fis  (RandomAccessFile.
