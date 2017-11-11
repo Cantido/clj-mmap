@@ -1,4 +1,4 @@
-(defproject org.clojars.cantido/clj-mmap "2.1.0-SNAPSHOT"
+(defproject org.clojars.cantido/clj-mmap "2.1.0"
   :description "A wrapper over java.nio's mmap() implementation to ease use, and enable mmap'ing files larger than 2GB."
   :url "https://github.com/Cantido/clj-mmap"
   :license {:name "MIT"
