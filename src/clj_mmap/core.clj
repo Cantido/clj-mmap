@@ -2,10 +2,10 @@
   "Easily memory-map files via Java's NIO, and handle files
    larger than 2GB."
   (:require [clojure.java.io :as io])
-  (:import (java.io RandomAccessFile Closeable File)
+  (:import (java.io RandomAccessFile Closeable File FileInputStream)
            (java.nio.channels FileChannel FileChannel$MapMode)
            (clojure.lang Indexed Seqable)
-           (java.nio MappedByteBuffer)))
+           (java.nio MappedByteBuffer ByteBuffer)))
 
 (set! *warn-on-reflection* true)
 
@@ -44,6 +44,19 @@
    :read-only  "r"
    :read-write "rw"})
 
+(defn- raf
+  ^RandomAccessFile [^File file map-mode]
+  (RandomAccessFile.
+    ^File (io/as-file file)
+    (str (map-perms map-mode))))
+
+(defn- build-mmap
+  [^FileInputStream fis ^FileChannel fc map-mode size]
+  (let [mmap (fn [pos n] (.map fc (map-modes map-mode) pos n))]
+    (Mmap. fis fc (mapv #(mmap % (min (- size %)
+                                      bytes-per-map))
+                        (range 0 size bytes-per-map)))))
+
 (defn get-mmap
   "Provided a file, mmap the entire file, and return an opaque type
    to allow further access. Remember to use with-open, or to call
@@ -51,27 +64,22 @@
    argument can be any implementation of clojure.java.io/Coercions."
   ([file] (get-mmap file :read-only))
   ([file map-mode]
-   (let [fis  (RandomAccessFile.
-                ^File (io/as-file file)
-                (str (map-perms map-mode)))
+   (let [fis  (raf file map-mode)
          fc   (.getChannel fis)
-         size (.size fc)
-         mmap (fn [pos n] (.map fc (map-modes map-mode) pos n))]
-     (Mmap. fis fc (mapv #(mmap % (min (- size %)
-                                       bytes-per-map))
-                         (range 0 size bytes-per-map)))))
+         size (.size fc)]
+     (build-mmap fis fc map-mode size)))
   ([file map-mode size]
-   (let [fis  (RandomAccessFile.
-                ^File (io/as-file file)
-                (str (map-perms map-mode)))
-         fc   (.getChannel fis)
-         mmap (fn [pos n] (.map fc (map-modes map-mode) pos n))]
-     (Mmap. fis fc (mapv #(mmap % (min (- size %)
-                                       bytes-per-map))
-                         (range 0 size bytes-per-map))))))
+   (let [fis  (raf file map-mode)
+         fc   (.getChannel fis)]
+     (build-mmap fis fc map-mode size))))
 
-(defn get-bytes ^bytes [mmap pos n]
-  "Retrieve n bytes from mmap, at byte position pos."
+(defn- buf-put [^ByteBuffer buf src offset length]
+  (.put buf src offset length))
+
+(defn- buf-get [^ByteBuffer buf src offset length]
+  (.get buf src offset length))
+
+(defn- chunk-op [mmap fn buf pos n]
   (let [get-chunk   #(nth mmap (int (/ % bytes-per-map)))
         end         (+ pos n)
         chunk-term  (-> pos
@@ -79,52 +87,33 @@
                         int
                         inc
                         (* bytes-per-map))
-        read-size   (- (min end chunk-term) ;; bytes to read in first chunk
+        op-size     (- (min end chunk-term) ;; bytes to op in first chunk
                        pos)
-        start-chunk ^MappedByteBuffer (get-chunk pos)
-        end-chunk   ^MappedByteBuffer (get-chunk end)
-        buf         (byte-array n)]
+        start-chunk ^ByteBuffer (get-chunk pos)
+        end-chunk   ^ByteBuffer (get-chunk end)]
 
     (locking start-chunk
       (.position start-chunk (mod pos bytes-per-map))
-      (.get start-chunk buf 0 read-size))
+      (fn start-chunk buf 0 op-size))
 
-    ;; Handle reads that span MappedByteBuffers
+    ;; Handle ops that span MappedByteBuffers
     (if (not= start-chunk end-chunk)
       (locking end-chunk
         (.position end-chunk 0)
-        (.get end-chunk buf read-size (- n read-size))))
+        (fn end-chunk buf op-size (- n op-size))))
 
     buf))
+
+(defn get-bytes ^bytes [mmap pos n]
+  "Retrieve n bytes from mmap, at byte position pos."
+  (chunk-op mmap buf-get (byte-array n) pos n))
 
 (defn put-bytes
   "Write n bytes from buf into mmap, at byte position pos.
    If n isn't provided, the size of the buffer provided is used."
   ([mmap ^bytes buf pos] (put-bytes mmap buf pos (alength buf)))
   ([mmap ^bytes buf pos n]
-   (let [get-chunk   #(nth mmap (int (/ % bytes-per-map)))
-         end         (+ pos n)
-         chunk-term  (-> pos
-                         (/ bytes-per-map)
-                         int
-                         inc
-                         (* bytes-per-map))
-         write-size   (- (min end chunk-term)
-                        pos)
-         start-chunk ^MappedByteBuffer (get-chunk pos)
-         end-chunk   ^MappedByteBuffer (get-chunk end)]
-
-     (locking start-chunk
-       (.position start-chunk (mod pos bytes-per-map))
-       (.put start-chunk buf 0 write-size))
-
-       ;; Handle writes that span MappedByteBuffers
-     (if (not= start-chunk end-chunk)
-       (locking end-chunk
-         (.position end-chunk 0)
-         (.put end-chunk buf write-size (- n write-size))))
-
-     nil)))
+   (chunk-op mmap buf-put buf pos n)))
 
 (defn loaded? [mmap]
   "Returns true if it is likely that the buffer's contents reside in physical memory."
